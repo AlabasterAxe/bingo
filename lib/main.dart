@@ -2,9 +2,15 @@ import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'data_utils.dart';
+
 void main() {
   runApp(MyApp());
 }
+
+const String SHEET_ID = "1SG6MIgfU4koBzIUCcKWOR1UuzkTMkQVVYxMh2p_pCpU";
+
+const String SHEET_NAME = "og_questions";
 
 String DATA = """"Grandma's favorite clothing store","Blair",,,,
 "Grandma's 10pm tv show","Judge Judy",,,,
@@ -33,9 +39,8 @@ Which family member most relates to a character in The Middle?,Katelyn and Sue,,
 What are the 3 most common names in the Tuzzolo family?,Michael,Joe,Anthony,,
 What does Grandma want on her Tomb Stone?,Glad that's over with,,,,""";
 
-List<List<dynamic>> loadAnswers() {
-  return CsvToListConverter()
-      .convert(DATA, shouldParseNumbers: false, eol: "\n");
+Future<List<List<dynamic>>> loadAnswers() {
+  return getSheet(SHEET_ID, SHEET_NAME);
 }
 
 class MyApp extends StatelessWidget {
@@ -61,21 +66,13 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  List<List<String>> answers;
+  Future<List<List<String>>> answers;
 
   List<List<bool>> checkedBoxes;
 
   @override
   void initState() {
     super.initState();
-
-    answers = [
-      ["", "", "", "", ""],
-      ["", "", "", "", ""],
-      ["", "", "", "", ""],
-      ["", "", "", "", ""],
-      ["", "", "", "", ""]
-    ];
 
     checkedBoxes = [
       [false, false, false, false, false],
@@ -85,21 +82,32 @@ class _MyHomePageState extends State<MyHomePage> {
       [false, false, false, false, false]
     ];
     List<String> linearizedAnswers = [];
-    List<List<dynamic>> allAnswers = loadAnswers();
-    for (List<dynamic> answerRow in allAnswers) {
-      List<dynamic> shuffledAnswers =
-          answerRow.getRange(1, answerRow.length).toList();
-      shuffledAnswers.shuffle();
-      linearizedAnswers
-          .add(shuffledAnswers.firstWhere((answer) => answer != "") as String);
-    }
+    answers = loadAnswers().then((allAnswers) {
+      var answerResult = [
+        ["", "", "", "", ""],
+        ["", "", "", "", ""],
+        ["", "", "", "", ""],
+        ["", "", "", "", ""],
+        ["", "", "", "", ""]
+      ];
 
-    linearizedAnswers.shuffle();
-    int index = 0;
-    for (String answer in linearizedAnswers.take(25)) {
-      answers[(index / 5).floor()][index % 5] = answer;
-      index++;
-    }
+      for (List<dynamic> answerRow
+          in allAnswers.getRange(1, allAnswers.length)) {
+        List<dynamic> shuffledAnswers =
+            answerRow.getRange(1, answerRow.length).toList();
+        shuffledAnswers.shuffle();
+        linearizedAnswers.add(
+            shuffledAnswers.firstWhere((answer) => answer != "") as String);
+      }
+
+      linearizedAnswers.shuffle();
+      int index = 0;
+      for (String answer in linearizedAnswers.take(25)) {
+        answerResult[(index / 5).floor()][index % 5] = answer;
+        index++;
+      }
+      return answerResult;
+    });
   }
 
   _getTitleLetter(String s, Color color) {
@@ -179,18 +187,26 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    var children2 = [
-      Expanded(child: _getTitleRow()),
-    ];
-    bool isEven = true;
-    int rowNum = 0;
-    for (List<String> answerRow in answers) {
-      children2.add(_getRow(answerRow, isEven, rowNum));
-      isEven = !isEven;
-      rowNum++;
-    }
-    return Scaffold(
-      body: Column(children: children2),
-    );
+    return FutureBuilder(
+        future: answers,
+        builder: (context, snapshot) {
+          if (snapshot.hasData) {
+            var children2 = [
+              Expanded(child: _getTitleRow()),
+            ];
+            bool isEven = true;
+            int rowNum = 0;
+            for (List<String> answerRow in snapshot.data) {
+              children2.add(_getRow(answerRow, isEven, rowNum));
+              isEven = !isEven;
+              rowNum++;
+            }
+            return Scaffold(
+              body: Column(children: children2),
+            );
+          } else {
+            return CircularProgressIndicator();
+          }
+        });
   }
 }
